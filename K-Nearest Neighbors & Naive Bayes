@@ -1,0 +1,197 @@
+#● K-Nearest Neighbors : The model that we’ll build will aim to predict the popularity of a particular app. Your app will fall into 
+# one of four groupings-- bad, normal, good, or popular (those groupings are based on the number of downloads, and are listed in order,
+# from smallest to largest). The outcome variable in this model will be installs .
+
+#1.Download the file ‘google_play_store.csv’ from our class Blackboard site.
+#2.Read this file into your R environment. 
+library(readr)
+gps<-read_csv("google_play_store.csv")
+View(gps)
+gps$Content.Rating<-as.factor(gps$Content.Rating)
+str(gps)
+
+#3.Data Preparation & Data Manipulation
+#a.Delete the following columns, as you will not need them: X, Category, Genres,Last.Updated, Current.Ver and Android.Ver. Show the step(s) that you used to do this.
+gps1<-gps[,-c(1,3,11,12,13,14)]
+#b.For any rows with “NA” values in Rating column, delete those rows entirely.
+anyNA(gps1$Rating)
+library("tidyr")
+gps2<- gps1 %>% drop_na(Rating)
+anyNA(gps2$Rating)
+View(gps2)
+#c.Remove any rows with a Content.Rating of “Adults only 18+” or “Unrated.” Then, use the droplevels() function to be sure that 
+your dataset only contains the factors that you are actually using.
+table(gps2$Content.Rating) 
+which (gps2$Content.Rating=="Adults only 18+" | gps2$Content.Rating=="Unrated")
+gps3<-gps2[-c( 288,2905,5949,7342),]
+table(gps3$Content.Rating) 
+gps3$Content.Rating<-droplevels(gps3$Content.Rating)
+#library("dplyr") gps3=subset(gps2, gps2$Content.Rating!="Adults only 18+" ) gps4=subset(gps3, gps3$Content.Rating!="Unrated") table(gps4$Content.Rating) gps4$Content.Rating<-droplevels(gps4$Content.Rating)
+#d. What type of variable is Size? Use the as.numeric() function to convert this variable into a numeric data type.
+str(gps3)
+gps3$Size<-as.numeric(gps3$Size)
+
+
+#4. Create a fictional app with a little bit of help from R’s random number generator.
+#a. First, give your app a name. What will you call it?
+#BrotherP
+
+#b. Give your app a randomly-generated rating between 3.5 and 5.
+set.seed(699)
+Rating<-runif(1,min=3.5,max=5)
+Rating
+
+#c. Give your app a randomly-generated number of reviews between 1 and 6002.
+Reviews<-runif(1,min=1,max=6002)
+Reviews
+
+#d. Give your app a randomly-generated size between 200 and 460.
+Size<-runif(1,min=200,max=460)
+Size
+
+#e. For the type category, you will randomly determine whether your app will be free or paid.Rather than just go 50/50 on this,
+# you’ll do it proportionately to the values in the actual dataset, using the rbinom() function. If you are unsure about
+# using this function, you may wish to view the Random Binomial Value Generation video. 
+table(gps3$Type)
+8715/(8715+647)
+set.seed(1130)
+Type<-rbinom(1,1,0.931)
+Type
+
+# f. If your app is free, assign it a Price of 0. If it is paid, however, assign it a normally distributed variable using the mean and standard deviation of the paid
+#apps in the Google Play store. Make that normally distributed variable your price. If you get a negative value for this value, just re-run the function until you get a positive value.
+mean(gps3$Price)
+sd(gps3$Price)
+set.seed(1130)
+p<-rnorm(1,0.96,15.82)
+Price<-ifelse(Type==1,0,p)
+Price
+
+# g. Decide the rating for your app -- place it into one of these categories:“Everyone”, “Everyone 10+”, “Mature 17+” or “Teen.” 
+(No R code required for this step).
+
+#5. k-nn uses numerical predictors to classify something that’s a factor. For any predictors that are categorical, convert them to binary dummies (and if it’s a category that has
+more than two possible values, be sure not to use fullRank in the dummyVars function-- either leave it out, or set it to false).
+str(gps3)
+library(caret)
+dmy<-dummyVars("~Content.Rating",data=gps3)
+ins<-data.frame(predict(dmy,newdata=gps3))
+gps4<-cbind(gps3,ins)
+
+dmy2<-dummyVars("~Type",data=gps4)
+ty<-data.frame(predict(dmy2,newdata=gps4))
+gps5<-cbind(gps4,ty)
+
+View(gps6)
+gps5<-gps5[,-c(6,8)]
+gps6<-gps5[!duplicated(gps5[,1], fromLast=TRUE), ]
+
+row.names(gps6) <- gps6[,1]
+gps6 <- gps6[,-1]
+gps6<-gps6[,c(1,2,3,5,6,7,8,9,10,11,4)]
+anyNA(gps6$Size)  # first factor then numeric
+gps6$Size[is.na(gps6$Size)]<-mean(gps6$Size,na.rm=TRUE)
+
+# 6. Using your assigned seed value (from Assignment 2), partition your data into training (60%) and validation (40%) sets. Show the step(s) that you used to do this.
+set.seed(400)
+library(dplyr)
+
+train.index <- sample(row.names(gps6),0.6*dim(gps6)[1])
+valid.index <- setdiff(row.names(gps6),train.index)
+train.df <- gps6[train.index,]
+valid.df <- gps6[valid.index,]
+str(gps6)
+
+# 7. Make a dataframe that contains information for the predictors for your app. Show the step(s) that you used to do this.
+BrotherP<-data.frame(row.names="PP",Rating,Reviews,Size,Price,Content.Rating.Everyone=0,Content.Rating.Everyone.10.=1,Content.Rating.Mature.17.=0,Content.Rating.Teen=0,TypeFree=1,TypePaid=0)
+View(BrotherP)
+
+# 8. Normalize your data using the preProcess() function from the caret package. Use Table 7.2 from the book as a guide for this. 
+library(caret)
+norm.values<-preProcess(train.df[,1:11], method=c("center","scale"))
+train.norm.df<-train.df
+valid.norm.df<-valid.df
+BrotherP.norm<-BrotherP
+
+train.norm.df[,1:10]<-predict(norm.values,train.df[,1:10])
+valid.norm.df[,1:10]<-predict(norm.values,valid.df[,1:10])
+BrotherP.norm<-predict(norm.values,BrotherP)
+View(BrotherP.norm)
+
+
+# 9. Using the knn() function from the FNN package, determine a classification for your app,using a k-value of 7. What category did your app fall into?
+
+library(FNN)
+nn<-knn(train=train.norm.df[,1:10], test=BrotherP.norm,cl=train.norm.df[,11],k=7)
+# row.names(train.df)[attr(nn,"nn.index")]
+nn
+
+#10. Use your validation set to help you determine an optimal k-value. Use Table 7.3 from the textbook as a guide here. 
+train.norm.df$Installs<-as.factor(train.norm.df$Installs)
+valid.norm.df$Installs<-as.factor(valid.norm.df$Installs)
+accuracy.df <- data.frame(k=seq(1,70,1),accuracy=rep(0,70))
+for(i in 1:70)
+{
+  knn.pred <- knn(train=train.norm.df[1:10],test=valid.norm.df[1:10],cl=train.norm.df[,11],k=i)
+  accuracy.df[i,2] <- confusionMatrix(knn.pred,valid.norm.df[,11])$overall[1]
+}
+accuracy.df
+max(accuracy.df$accuracy)
+
+#11. Re-run your knn() function with this new k-value. What result did you obtain? Was it different from the one you saw in Step 9? Show the step(s) that you used to do this, along with the output in the console.
+library(FNN)
+nn<-knn(train=train.norm.df[,1:10], test=BrotherP.norm,cl=train.norm.df[,11],k=70)
+row.names(train.df)[attr(nn,"nn.index")]
+nn
+
+#● Naive Bayes :
+#1. Download the file ‘kickstart_project.csv’ from our class Blackboard site.
+#2. Select any ONE of the predictors from Group A (duration and goal) and then select anyFOUR variables from Group B (category, main_category, currency, 
+#launched and country). Explain your variable selections -- for each one you chose, write one sentence explaining why you think it might be valuable.
+library(readr)
+kick<-read_csv("kickstart_project.csv")
+View(kick)
+library(dplyr)
+kicka<-select(kick,goal)
+kickb<-select(kick, main_category, currency, launched,country)
+
+#3. Data preparation. Change your Group A variable to a categorical variable. Cut the numeric variable to several groups as you like. 
+str(kicka)
+summary(kicka$goal)
+kicka$goal<-cut(kicka$goal, breaks=c(0,2000,5000,15000,100000000 ),labels=c("Low","Median","High","Superhigh"))
+state<-kick$state
+kick2<-cbind(kicka,kickb,state)
+View(kick2)
+str(kick2)
+
+#4. Using your seed value, partition your data into training (60%) and validation (40%) sets. Show the step(s) that you used to do this.
+set.seed(400)
+library(dplyr)
+kick3<- sample_n(kick2, 322994)
+tr<- slice(kick3, 1:193796)
+va<- slice(kick3, 193797:322994)
+
+#5. Build a naive bayes model, with the response variable state.
+str(kick3)
+kick3$launched<-factor(kick3$launched)
+library(e1071)
+kick.nb<-naiveBayes(state~.,data=kick3)
+kick.nb
+
+#6. Show a confusion matrix that compares the performance of your model against the training data, 
+#and another that shows its performance against the validation data, use the accuracy metric for this analysis ). 
+library(forecast)
+predict1<-predict(kick.nb,tr)
+View(predict1)
+confusionMatrix(predict1,tr$state)
+
+library(forecast)
+predict2<-predict(kick.nb,va)
+View(predict2)
+confusionMatrix(predict2,va$state)
+View(kick3)
+str(kick3)
+
+#7. Using ggplot, create a data visualization that shows the relationship between state and goal.
+library(ggplot2)
+ggplot(kick3,aes(x=goal,fill=state))+geom_bar()+ggtitle("Relationship Between State and Goal")
